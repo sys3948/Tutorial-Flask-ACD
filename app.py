@@ -3,6 +3,8 @@ from flask_bootstrap import Bootstrap
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
 from wtforms.validators import Required
+import pymysql
+
 app = Flask(__name__)
 bootstrap = Bootstrap(app)
 
@@ -18,13 +20,22 @@ app.config['SECRET_KEY'] = 'hard secret key token'
 def index():
     form = NameForm()
     if form.validate_on_submit():
-        old_name = session.get('name')
-        if old_name is not None and old_name != form.name.data:
-            flash('Looks like you have changed your name!')
+        conn = pymysql.connect(host='192.168.111.133', port=3306, user='user_name', passwd='password', database='schema name')
+        cur = conn.cursor()
+        cur.execute('select username from user where username="%s"' %(form.name.data))
+        user = cur.fetchone()
+        if user is None:
+            cur.execute('insert into user(username) value("%s")' %(form.name.data))
+            conn.commit()
+            session['known'] = False
+        else:
+            session['known'] = True
         session['name'] = form.name.data
         form.name.data = ''
+        cur.close()
+        conn.close()
         return redirect(url_for('index'))
-    return render_template('index.html', form = form, name = session.get('name'))
+    return render_template('index.html', form = form, name = session.get('name'), known = session.get('known', False))
 
 @app.route('/name/<test>')
 def name(test):

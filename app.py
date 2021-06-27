@@ -4,10 +4,23 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField
 from wtforms.validators import Required
 import pymysql
+from flask_mail import Mail
+from flask_mail import Message
+
+import sys
+sys.path.append('d:/uploadGit/account_info')
+import google_info as g_info
+import mysql_info as m_info
 
 app = Flask(__name__)
 bootstrap = Bootstrap(app)
+app.config['MAIL_SERVER'] = 'smtp.googlemail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = g_info.account_h
+app.config['MAIL_PASSWORD'] = g_info.password_h
 
+mail = Mail(app)
 
 class NameForm(FlaskForm):
     name = StringField('What is your name?', validators=[Required()])
@@ -16,11 +29,21 @@ class NameForm(FlaskForm):
 
 app.config['SECRET_KEY'] = 'hard secret key token'
 
+app.config['FLASKY_MAIL_SUBJECT_PREFIX'] = '[Flasky]'
+app.config['FLASKY_MAIL_SENDER'] = 'Flasky Admin <flasky@example.com>'
+
+
+def send_email(to, subject, template, **kwargs):
+    msg = Message(subject, sender = 'Flasky Admin <flasky@example.com>', recipients=[to])
+    msg.body = render_template(template + '.txt', **kwargs)
+    msg.html = render_template(template + '.html', **kwargs)
+    mail.send(msg)
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     form = NameForm()
     if form.validate_on_submit():
-        conn = pymysql.connect(host='192.168.111.133', port=3306, user='user_name', passwd='password', database='schema name')
+        conn = pymysql.connect(host='192.168.111.133', port=3306, user=m_info.account_c , passwd=m_info.password_c, database='flasky', charset='utf8')
         cur = conn.cursor()
         cur.execute('select username from user where username="%s"' %(form.name.data))
         user = cur.fetchone()
@@ -39,6 +62,7 @@ def index():
 
 @app.route('/name/<test>')
 def name(test):
+    send_email(to = 'sys3948@naver.com', subject='New User', template='mail/new_user')
     return render_template('user.html', name=test) 
 
 @app.route('/login')

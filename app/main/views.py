@@ -1,17 +1,14 @@
-from flask import render_template, abort, session, redirect, url_for, flash
+from flask import render_template, abort, session, redirect, url_for, flash, current_app
 from . import main
 from .forms import NameForm
 from ..email import send_email
+import pymysql
 
 @main.route('/', methods=['GET', 'POST'])
 def index():
     form = NameForm()
     if form.validate_on_submit():
-        import pymysql
-        import sys
-        sys.path.append('d:/uploadGit/account_info')
-        import mysql_info as m_info
-        conn = pymysql.connect(host='192.168.111.133', port=3306, user=m_info.account_c , passwd=m_info.password_c, database='flasky', charset='utf8')
+        conn = pymysql.connect(host='192.168.111.133', port=3306, user=current_app.config['DB_USER'] , passwd=current_app.config['DB_PASSWD'], database='flasky', charset='utf8')
         cur = conn.cursor()
         cur.execute('select username from user where username="%s"' %(form.name.data))
         user = cur.fetchone()

@@ -19,6 +19,9 @@ class DevelopmentConfig(Config):
     import google_info as g_info
     MAIL_USERNAME = g_info.account_h
     MAIL_PASSWORD = g_info.password_h
+    import mysql_info as m_info
+    DB_USER = m_info.account_c
+    DB_PASSWD = m_info.password_c
 
 
 class TestingConfig(Config):

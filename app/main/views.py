@@ -23,7 +23,7 @@ def index():
         cur.close()
         conn.close()
         return redirect(url_for('.index'))
-    return render_template('index.html', form = form, name = session.get('name'), known = session.get('known', False))
+    return render_template('index.html')
 
 @main.route('/name/<test>')
 def name(test):

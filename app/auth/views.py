@@ -45,7 +45,7 @@ def register():
         confirm = cur.fetchone()
         cur.close()
         conn.close()
-        s = Serializer(current_app.config['SCRET_KEY'], 3600)
+        s = Serializer(current_app.config['SECRET_KEY'], 3600)
         token = s.dumps({'confirm' : confirm[0]})
         send_email(form.email.data, 'Confirm Your Account', 'auth/email/confirm', username=form.username.data, token=token)
         flash('A confirmation email has been sent to you by email.')
@@ -77,4 +77,38 @@ def confirm(token):
 
     cur.close()
     conn.close()
+    return redirect(url_for('main.index'))
+
+
+@auth.before_app_request
+def before_request(): # request hooks - before_request : 각 리퀘스트 전에 실행하는 함수를 등록하는 후크이다. before_request 와 같은 후크로 blueprint를 적용할 시 before_request 후크는 before_app_request로 변경된다.
+    print('request hooks!!')
+    print('request End Point! : ' + request.endpoint) # 현재 URL에 해당하는 뷰함수의 포인트를 출력 ex) main/views.py의 index 뷰함수면 main.index
+    print('request Blueprint! : ' + request.blueprint) # 현재 URL에 해당하는 blueprint의 명칭을 출력.
+    if 'id' in session and 'name' in session and request.blueprint != 'auth': # user 인증 확인 조건문으로 auth blueprint를 제외(로그인, 회원가입, 재인증, 인증 등에 엮이지 않도록 하기 위한 조건문 내용)
+        conn = pymysql.connect(host='192.168.111.133', port=3306, user=current_app.config['DB_USER'], passwd=current_app.config['DB_PASSWD'], database='flasky')
+        cur = conn.cursor()
+        cur.execute('select confirmed, username from user where id = "%s"' %(session.get('id')))
+        user = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not user[0]:
+            return render_template('auth/unconfirmed.html', username = user[1])
+
+
+@auth.route('/confirm')
+def resend_confirmation():
+    if not 'id' in session and not 'name' in session:
+        return redirect(url_for('auth.login'))
+    s = Serializer(current_app.config['SECRET_KEY'], 3600)
+    token = s.dumps({'confirm' : session.get('id')})
+    conn = pymysql.connect(host='192.168.111.133', port=3306, user=current_app.config['DB_USER'], passwd=current_app.config['DB_PASSWD'], database='flasky')
+    cur = conn.cursor()
+    cur.execute('select username, email from user where id = "%s"' %(session.get('id')))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    send_email(user[1], 'Confirm Your Account', 'auth/email/confirm', username=user[0], token=token)
+    print('send Email!!')
+    flash('A new confirmation email has been sent to you by email.')
     return redirect(url_for('main.index'))

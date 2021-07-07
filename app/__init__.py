@@ -1,9 +1,6 @@
-from flask import Flask, render_template
+from flask import Flask
 from flask_bootstrap import Bootstrap
-from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField
-from wtforms.validators import Required
-from flask_mail import Mail, Message
+from flask_mail import Mail
 from config import config
 
 bootstrap = Bootstrap()

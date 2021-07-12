@@ -1,7 +1,7 @@
 from flask import render_template, redirect, request, url_for, flash, current_app, session
 from wtforms.validators import Email
 from . import auth
-from .forms import LoginForm, RegistrationForm, ChangePasswordForm, PasswordResetForm, PasswordResetRequestForm
+from .forms import LoginForm, RegistrationForm, ChangePasswordForm, PasswordResetForm, PasswordResetRequestForm, ChangeEmailForm
 from ..email import send_email
 import pymysql
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -63,13 +63,17 @@ def confirm(token):
         return redirect(url_for('auth.login'))
     conn = pymysql.connect(host='192.168.111.133', port=3306, user=current_app.config['DB_USER'], passwd=current_app.config['DB_PASSWD'], database='flasky')
     cur = conn.cursor()
-    cur.execute('select id, confirmed from user where id = "%s"' %(data.get('confirm')))
+    cur.execute('select id, confirmed, email from user where id = "%s"' %(data.get('confirm')))
     user = cur.fetchone()
 
     if user[1]:
         return redirect(url_for('main.index'))
-    if user[0] == data.get('confirm'):
+    elif user[0] == data.get('confirm'):
         cur.execute('update user set confirmed=true where id="%s"' %(user[0]))
+        if user[2] == current_app.config['FLASKY_ADMIN']:
+            cur.execute("update user set role_id = (select id from role where name='Administrator') where id = '%s'" %(user[0]))
+        else:
+            cur.execute("update user set role_id = (select id from role where default_value = 1) where id = '%s'" %(user[0]))
         conn.commit()
         flash('You have confirmed your account. Thanks!')
     else:
@@ -155,6 +159,9 @@ def password_reset_required():
         token_id = cur.fetchone()
         cur.close()
         conn.close()
+        if not token_id:
+            flash('해당 이메일이 존재하지 않습니다.')
+            return redirect(url_for('auth.password_reset_required'))
         s = Serializer(current_app.config['SECRET_KEY'], 3600)
         token = s.dumps({'reset' : token_id[0]})
         send_email(form.email.data, 'Reset Your Password', 'auth/email/reset_password',username = token_id[1], token = token)
@@ -198,3 +205,63 @@ def reset_password(token):
             return redirect(url_for('main.index'))
 
     return render_template('auth/reset_password.html', form = form)
+
+
+@auth.route('/change_email', methods=['GET', 'POST'])
+def change_email():
+    if not 'id' in session and not 'name' in session:
+        flash('로그인을 해주세요.')
+        return redirect(url_for('auth.login'))
+    form = ChangeEmailForm()
+    if form.validate_on_submit():
+        conn = pymysql.connect(host='192.168.111.133', port=3306, user=current_app.config['DB_USER'], passwd=current_app.config['DB_PASSWD'], database='flasky')
+        cur = conn.cursor()
+        if cur.execute("select email from user where email = '%s'" %(form.email.data)):
+            cur.close()
+            conn.close()
+            flash('가입된 이메일입니다.')
+            return redirect(url_for('auth.change_email'))
+        cur.execute("select username, password_hash from user where id = '%s'" %(session.get('id')))
+        token_id = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if check_password_hash(token_id[1], form.password.data):
+            s = Serializer(current_app.config['SECRET_KEY'], 3600)
+            token = s.dumps({'id' : session.get('id'), 'email' : form.email.data})
+            send_email(form.email.data, 'Change Your Email', 'auth/email/change_email', username = token_id[0], token = token)
+            flash('이메일 인증 절차를 진행합니다. 인증 메일 ' + form.email.data + '에 메일을 전송했습니다. 확인해주세요.')
+            return redirect(url_for('main.index'))
+        else:
+            flash('비밀번호가 옳바르지 않습니다.')
+            return redirect(url_for('auth.change_email'))
+
+    return render_template('auth/change_email.html', form = form)
+
+
+@auth.route('/email_confirm/<token>')
+def change_email_token(token):
+    print('test email token')
+    if not 'id' in session and not 'name' in session:
+        flash('로그인을 해주세요.')
+        return redirect(url_for('auth.login'))
+
+    s = Serializer(current_app.config['SECRET_KEY'], 3600)
+    data = s.loads(token)
+    conn = pymysql.connect(host='192.168.111.133', port=3306, user=current_app.config['DB_USER'], passwd=current_app.config['DB_PASSWD'], database='flasky')
+    cur = conn.cursor()
+    if not cur.execute('select * from user where id = "%s"' %(data.get('id'))):
+        cur.close()
+        conn.close()
+        flash('잘 못 된 토큰 정보입니다.')
+        return redirect(url_for('auth.change_email'))
+
+    cur.execute("update user set email = '%s' where id = '%s'" %(data.get('email'), data.get('id')))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    session.clear()
+
+    flash('이메일 수정되었습니다. 다시 로그인을 해주세요.')
+    return redirect(url_for('auth.login'))

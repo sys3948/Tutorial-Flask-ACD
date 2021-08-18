@@ -10,6 +10,7 @@ class Config:
 
     @staticmethod
     def init_app(app):
+        # 초기화를 수행하기 위한 메소드. 초기화만 하기 위해서 빈 메소드로 처리.
         pass
 
 

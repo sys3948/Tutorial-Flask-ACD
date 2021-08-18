@@ -4,8 +4,9 @@ from . import auth
 from .forms import LoginForm, RegistrationForm, ChangePasswordForm, PasswordResetForm, PasswordResetRequestForm, ChangeEmailForm
 from ..email import send_email
 import pymysql
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash # 비밀번호 해쉬를 위한 모듈.
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
+from datetime import date, datetime
 
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
@@ -89,15 +90,34 @@ def before_request(): # request hooks - before_request : 각 리퀘스트 전에
     # print('request hooks!!')
     # print('request End Point! : ' + request.endpoint) # 현재 URL에 해당하는 뷰함수의 포인트를 출력 ex) main/views.py의 index 뷰함수면 main.index
     # print('request Blueprint! : ' + request.blueprint) # 현재 URL에 해당하는 blueprint의 명칭을 출력.
-    if 'id' in session and 'name' in session and request.blueprint != 'auth': # user 인증 확인 조건문으로 auth blueprint를 제외(로그인, 회원가입, 재인증, 인증 등에 엮이지 않도록 하기 위한 조건문 내용)
+    if 'id' in session and 'name' in session: # 로그인 확인 조건문을 통해 로그인 여부를 체크한다. 조건문이 True라면 최신 접속일은 update한다.
         conn = pymysql.connect(host='192.168.111.133', port=3306, user=current_app.config['DB_USER'], passwd=current_app.config['DB_PASSWD'], database='flasky')
         cur = conn.cursor()
         cur.execute('select confirmed, username from user where id = "%s"' %(session.get('id')))
         user = cur.fetchone()
+        # request hooks를 이용하여 최근 로그인 시간은 update하는 기능인데 이 부분을 login과 logout을 시도할 때 update하는것이 더 낫지 않을까..?
+        cur.execute("update user set last_seen = '%s' where id = '%s'" %(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), session.get('id')))
+        conn.commit()
+        if not user[0] and request.blueprint != 'auth': # user 인증 확인과 auth blueprint를 제외(로그인, 회원가입, 재인증, 인증 등에 엮이지 않도록 하기 위한 조건문 내용)하는 조건문으로 인증이 되지 않으면 재인증 페이지로 이동
+            cur.close()
+            conn.close()
+            return redirect(url_for('auth.unconfirmed'))
         cur.close()
         conn.close()
-        if not user[0]:
-            return render_template('auth/unconfirmed.html', username = user[1])
+
+
+@auth.route('/unconfirmed')
+def unconfirmed():
+    if 'id' in session and 'name' in session:
+        conn = pymysql.connect(host='192.168.111.133', port=3306, user=current_app.config['DB_USER'], passwd=current_app.config['DB_PASSWD'], database='flasky')
+        cur = conn.cursor()
+        cur.execute('select confirmed, username from user where id = "%s"' %(session.get('id')))
+        confirm = cur.fetchone()
+        cur.close()
+        conn.close()
+        if confirm[0]:
+            return redirect(url_for('main.index'))
+        return render_template('auth/unconfirmed.html', username = confirm[1])
 
 
 @auth.route('/confirm')
